@@ -10,6 +10,21 @@
 // Created by electrix on 4/16/26.
 //
 
+
+ssize_t read_chunk(FILE *in, uint8_t *buffer, size_t max_len, bool *eof) {
+    size_t n = fread(buffer, 1, max_len, in);
+
+    if (n < max_len) {
+        if (feof(in)) {
+            *eof = true;
+        } else if (ferror(in)) {
+            return -1; // chyba
+        }
+    }
+
+    return (ssize_t)n;
+}
+
 int socket_setup(struct network_config *cfg) {
     struct addrinfo *p;
     int sock = -1;

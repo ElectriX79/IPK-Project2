@@ -21,10 +21,10 @@ struct network_config {
     bool is_server;
     bool is_client;
     uint16_t port;
-    struct sockaddr_storage addr;
+    struct addrinfo *addr;
     socklen_t addr_len;
-    char input_file[500];
-    char output_file[500];
+    char *input_file;
+    char *output_file;
     int timeout;
 };
 
