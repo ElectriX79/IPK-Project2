@@ -14,4 +14,6 @@ add_executable(IPK_Project2
         include/client_engine.h
         include/server_engine.h
         include/read_write_engine.h
-        src/read_write_engine.c)
+        src/read_write_engine.c
+        include/checksum.h
+        src/checksum.c)
