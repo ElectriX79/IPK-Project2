@@ -5,4 +5,13 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(IPK_Project2
         src/main.c
-        "include/network_config.h")
+        "include/config.h"
+        include/rdt_header.h
+        include/arg_parser.h
+        src/arg_parser.c
+        src/client_engine.c
+        src/server_engine.c
+        include/client_engine.h
+        include/server_engine.h
+        include/read_write_engine.h
+        src/read_write_engine.c)
