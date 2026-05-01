@@ -8,6 +8,6 @@
 #include "config.h"
 
 int client_engine(int sock_id, struct config *cfg);
-int client_handshake(int sock_id);
+int client_handshake(int sock_id, struct config *cfg);
 
 #endif //IPK_PROJECT2_CLIENT_ENGINE_H

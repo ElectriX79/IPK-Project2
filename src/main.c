@@ -45,8 +45,15 @@ int socket_setup(struct config *cfg) {
 
 
 int main(int argc, char **argv) {
+    int socket_id;
     struct config net_cfg;
     argument_parser(argc, argv, &net_cfg);
+
+    if(socket_id = socket_setup(&net_cfg) != 0) {
+        fprintf(stderr, "Error: sock creation failed");
+    }
+
+
 
 
 
