@@ -10,6 +10,9 @@
 #define SYN 0x01
 #define ACK 0x02
 #define FIN 0x04
+#define DATA 0x08
+
+#define PAYLOAD_SIZE 1180
 
 struct rdt_header {
     uint32_t connection_id;
@@ -18,6 +21,11 @@ struct rdt_header {
     uint32_t checksum;
     uint16_t data_len;
     uint8_t flags;
+};
+
+struct packet {
+    struct rdt_header hdr;
+    char payload[PAYLOAD_SIZE];
 };
 
 #endif //IPK_PROJECT2_RDT_HEADER_H

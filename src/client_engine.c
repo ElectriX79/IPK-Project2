@@ -6,6 +6,8 @@
 #include "../include/rdt_header.h"
 #include "../include/read_write_engine.h"
 #include "../include/checksum.h"
+#include "../include/gbn.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -18,11 +20,12 @@
 
 
 
-int client_handshake(int sock_id, struct config *cfg) {
+int client_server_handshake(int sock_id, struct config *cfg) {
     // Header initialization for first stage of handshake
     struct rdt_header packet_hdr = {0};
     struct rdt_header packet_rcv = {0};
     const uint32_t conn_id = (uint32_t)(rand() % 10000);
+    cfg->connection_id = conn_id;
     packet_hdr.connection_id = conn_id;
     packet_hdr.seq_num = 0;
     packet_hdr.ack = 0;
@@ -101,13 +104,42 @@ int client_handshake(int sock_id, struct config *cfg) {
 int client_engine(int sock_id, struct config *cfg) {
     if(sock_id == -1) {
         fprintf(stderr, "Error: Socket does not exist\n");
-        exit(1);
+        return -1;
     }
 
-    if(client_handshake(sock_id, cfg) != 0) {
+    if(client_server_handshake(sock_id, cfg) != 0) {
         fprintf(stderr, "Error: Handshake failed\n");
-        exit(1);
+        return -1;
     }
+
+    struct window window;
+    window_init(&window, cfg);
+
+
+
+    while(1) {
+        if(window.done == true && window.base == window.next_seq) {
+            terminate_connection(sock_id, cfg);
+            return 0;
+        }
+        if(window.next_seq < window.base + WINDOW_SIZE) {
+            if(window_send(sock_id, &window, cfg) != 0) {
+                exit(1);
+            }
+        }
+        if(window_receive_ack(sock_id, &window, cfg) == 0) {
+            window_retransmit(sock_id, &window, cfg);
+        }
+
+
+    }
+
+
+
+
+
+
+
 
 
 

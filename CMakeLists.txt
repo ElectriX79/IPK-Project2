@@ -16,4 +16,6 @@ add_executable(IPK_Project2
         include/read_write_engine.h
         src/read_write_engine.c
         include/checksum.h
-        src/checksum.c)
+        src/checksum.c
+        include/gbn.h
+        src/gbn.c)
