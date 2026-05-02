@@ -22,7 +22,6 @@ int terminate_connection(int sock_id, struct config *cfg) {
     struct rdt_header fin = {0};
     struct rdt_header resp = {0};
 
-    // --- vytvor FIN ---
     fin.connection_id = htonl(cfg->connection_id);
     fin.seq_num = htonl(0);
     fin.ack = htonl(0);
@@ -32,7 +31,6 @@ int terminate_connection(int sock_id, struct config *cfg) {
 
     fin.checksum = compute_checksum(&fin, sizeof(fin));
 
-    // --- retry loop ---
     for (int i = 0; i < 5; i++) {
 
         if (send(sock_id, &fin, sizeof(fin), 0) < 0) {
@@ -44,14 +42,12 @@ int terminate_connection(int sock_id, struct config *cfg) {
 
         if (n < 0) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                // timeout → retry
                 continue;
             }
             perror("recv FIN-ACK");
             return -1;
         }
 
-        // --- checksum ---
         uint32_t chk = resp.checksum;
         resp.checksum = 0;
 
@@ -59,14 +55,12 @@ int terminate_connection(int sock_id, struct config *cfg) {
             continue;
         }
 
-        // --- konverzia ---
         uint32_t conn_id = ntohl(resp.connection_id);
 
         if (conn_id != cfg->connection_id) {
             continue;
         }
 
-        // --- kontrola flags ---
         if ((resp.flags & (FIN | ACK)) == (FIN | ACK)) {
             return 0; // ✔ úspech
         }

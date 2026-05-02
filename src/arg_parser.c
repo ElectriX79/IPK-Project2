@@ -143,6 +143,5 @@ void argument_parser(int argc, char **argv, struct config *cfg) {
         exit(1);
     }
 
-    // uloženie adresy
     cfg->addr = res;
 }

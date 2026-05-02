@@ -9,12 +9,12 @@
 #include "read_write_engine.h"
 #include "rdt_header.h"
 #include <stdbool.h>
-#define WINDOW_SIZE 50000
+#define WINDOW_SIZE 10
 #define TIMEOUT 2
 #define DATA_LEN 1180
 
 struct window {
-    struct packet packets[50000];
+    struct packet packets[WINDOW_SIZE];
     uint32_t base;
     uint32_t next_seq;
     FILE *input;

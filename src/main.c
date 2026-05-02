@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <netdb.h>
 #include "../include/arg_parser.h"
+#include "../include/server_engine.h"
+#include "../include/client_engine.h"
 #include "../include/rdt_header.h"
 #include "../include/read_write_engine.h"
 
@@ -24,6 +26,8 @@ int socket_setup(struct config *cfg) {
             continue;
         }
         if(cfg->is_server) {
+            int opt = 1;
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
             if(bind(sock, p->ai_addr,p->ai_addrlen) == 0) {
                 return sock;
             }
@@ -45,19 +49,47 @@ int socket_setup(struct config *cfg) {
 
 
 int main(int argc, char **argv) {
+
     int socket_id;
     struct config net_cfg;
+
     argument_parser(argc, argv, &net_cfg);
 
-    if(socket_id = socket_setup(&net_cfg) != 0) {
-        fprintf(stderr, "Error: sock creation failed");
+    // --- socket setup ---
+    socket_id = socket_setup(&net_cfg);
+    if (socket_id < 0) {
+        perror("socket_setup");
+        return -1;
+    }
+
+    // --- režim ---
+    if (net_cfg.is_server) {
+
+        if (server_engine(socket_id, &net_cfg) != 0) {
+            fprintf(stderr, "Server error\n");
+        }
+
+    } else if (net_cfg.is_client) {
+
+        if (client_engine(socket_id, &net_cfg) != 0) {
+            fprintf(stderr, "Client error\n");
+        }
+
+    } else {
+        fprintf(stderr, "Error: must specify -s or -c\n");
+        close(socket_id);
+        return -1;
     }
 
 
+    close(socket_id);
+    freeaddrinfo(net_cfg.addr);
 
-
-
-
-
-
+    return 0;
 }
+
+
+
+
+
+
