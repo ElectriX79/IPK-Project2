@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#define DATA_LEN 1180
-
 void window_init(struct window *window, struct config *cfg) {
     window->base = 0;
     window->next_seq = 0;
@@ -52,7 +50,7 @@ int window_send(int sock_id, struct window *w, struct config *cfg) {
     pkt_hdr->connection_id = htonl(cfg->connection_id);
     pkt_hdr->seq_num = htonl(w->next_seq);
     pkt_hdr->ack = htonl(0);
-    pkt_hdr->checksum = htonl(0);
+    pkt_hdr->checksum = 0;
     pkt_hdr->data_len = htons(n);
     pkt_hdr->flags = DATA;
 
@@ -75,7 +73,7 @@ int window_receive_ack(int sock_id, struct window *w, struct config *cfg) {
             perror("recv");
             return -1;
         }
-        return 0;
+        return TIMEOUT;
     }
 
     uint32_t checksum = pkt_hdr.checksum;
@@ -112,6 +110,7 @@ int window_retransmit(int sock_id, struct window *w, struct config *cfg) {
         if(send(sock_id, &w->packets[index],sizeof(w->packets[index].hdr)+ntohs(w->packets[index].hdr.data_len),0) < 0) {
             perror("send retransmit");
             return -1;
+        }
     }
     return 0;
 }

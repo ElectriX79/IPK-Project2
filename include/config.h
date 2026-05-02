@@ -7,7 +7,7 @@
 #ifndef IPK_PROJECT2_PROGRAM_CONFIGURATION_H_H
 #define IPK_PROJECT2_PROGRAM_CONFIGURATION_H_H
 #include <stdint.h>
-#include <bits/socket.h>
+#include <sys/socket.h>
 
 
 struct config {

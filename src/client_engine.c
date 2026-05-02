@@ -7,7 +7,7 @@
 #include "../include/read_write_engine.h"
 #include "../include/checksum.h"
 #include "../include/gbn.h"
-
+#include "../include/gbn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -16,6 +16,65 @@
 #include <netinet/in.h>
 
 #define MSG_SIZE 1200;
+
+int terminate_connection(int sock_id, struct config *cfg) {
+
+    struct rdt_header fin = {0};
+    struct rdt_header resp = {0};
+
+    // --- vytvor FIN ---
+    fin.connection_id = htonl(cfg->connection_id);
+    fin.seq_num = htonl(0);
+    fin.ack = htonl(0);
+    fin.data_len = htons(0);
+    fin.flags = FIN;
+    fin.checksum = 0;
+
+    fin.checksum = compute_checksum(&fin, sizeof(fin));
+
+    // --- retry loop ---
+    for (int i = 0; i < 5; i++) {
+
+        if (send(sock_id, &fin, sizeof(fin), 0) < 0) {
+            perror("send FIN");
+            return -1;
+        }
+
+        int n = recv(sock_id, &resp, sizeof(resp), 0);
+
+        if (n < 0) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                // timeout → retry
+                continue;
+            }
+            perror("recv FIN-ACK");
+            return -1;
+        }
+
+        // --- checksum ---
+        uint32_t chk = resp.checksum;
+        resp.checksum = 0;
+
+        if (compute_checksum(&resp, sizeof(resp)) != chk) {
+            continue;
+        }
+
+        // --- konverzia ---
+        uint32_t conn_id = ntohl(resp.connection_id);
+
+        if (conn_id != cfg->connection_id) {
+            continue;
+        }
+
+        // --- kontrola flags ---
+        if ((resp.flags & (FIN | ACK)) == (FIN | ACK)) {
+            return 0; // ✔ úspech
+        }
+    }
+
+    fprintf(stderr, "Failed to terminate connection\n");
+    return -1;
+}
 
 
 
@@ -124,26 +183,23 @@ int client_engine(int sock_id, struct config *cfg) {
         }
         if(window.next_seq < window.base + WINDOW_SIZE) {
             if(window_send(sock_id, &window, cfg) != 0) {
-                exit(1);
+                window_cleanup(sock_id,&window);
+                return -1;
             }
         }
-        if(window_receive_ack(sock_id, &window, cfg) == 0) {
-            window_retransmit(sock_id, &window, cfg);
+        int ret = window_receive_ack(sock_id, &window, cfg);
+        if(ret == 0) {
+            continue;
         }
-
-
+        else if (ret == TIMEOUT) {
+            if(window_retransmit(sock_id, &window, cfg) < 0) {
+                window_cleanup(sock_id, &window);
+                return -1;
+            }
+        }
+        else if(ret == -1) {
+            window_cleanup(sock_id, &window);
+            return -1;
+        }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-    return 0;
 }
