@@ -374,11 +374,8 @@ AI was used as a debugging aid at several points during development:
 
 - **Segmentation fault in `client_engine`** — After observing a SIGSEGV on the client side during IPv6 testing, GDB backtraces were shared with the AI. The root cause was identified as `struct config` being uninitialized on the stack (`struct config net_cfg;` instead of `struct config net_cfg = {0};`), causing `cfg->input_file` to hold a garbage pointer which `fopen` received and returned `NULL`, leading to a null dereference inside `fread`.
 
-- **Extra 7 bytes in stdin→stdout transfer** — The AI helped identify that `printf("success")` was writing to `stdout` instead of `stderr`, contaminating the data stream when the server output was piped. The fix was to redirect all informational output to `stderr`.
-
 - **IPv6 not working** — The AI identified that `getaddrinfo` returns IPv4 addresses before IPv6 on most Linux systems. Because `socket_setup` bound to the first successful result, the server always ended up listening on `0.0.0.0` (IPv4 only). The fix was to iterate the address list twice — preferring `AF_INET6` on the first pass with `IPV6_V6ONLY` disabled (dual-stack), and falling back to `AF_INET` only if IPv6 binding fails.
 
-- **Stray text in `gbn.c`** — A stray token `ds` appeared in the source file causing a compilation error. The AI identified its location and the fix.
 
 ### Testing
 
