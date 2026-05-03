@@ -19,3 +19,6 @@ all:
 # Remove the executable
 clean:
 	rm -f $(TARGET)
+
+NixDevShellName:
+	@echo c

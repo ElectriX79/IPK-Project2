@@ -101,8 +101,7 @@ int server_engine(int sock_id, struct config *cfg) {
                 if (is_stdout) {
                     fwrite(pkt.payload, 1, data_len, output);
                 } else {
-                    write_to_file(output, (uint8_t *)pkt.payload, data_len,
-                                  (long)seq  * DATA_LEN);
+                    write_to_file(output, (uint8_t *)pkt.payload, data_len,(long)seq  * DATA_LEN);
                 }
 
                 expected_seq++;

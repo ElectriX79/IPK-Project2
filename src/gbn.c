@@ -19,7 +19,6 @@ void window_init(struct window *window, struct config *cfg) {
     memset(window->packets, 0, sizeof(window->packets));
 
 
-
     if(strcmp(cfg->input_file, "-") == 0) {
         window->input = stdin;
     }
