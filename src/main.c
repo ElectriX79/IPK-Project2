@@ -36,21 +36,26 @@ int socket_setup(struct config *cfg) {
 
             if (cfg->is_server) {
 
-                if (pass == 0 && p->ai_family != AF_INET6) continue;
-                if (pass == 1 && p->ai_family != AF_INET)  continue;
+                if (pass == 0 && p->ai_family != AF_INET6) {
+                    continue;
+                }
+                if (pass == 1 && p->ai_family != AF_INET) {
+                    continue;
+                }
             }
 
             sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-            if (sock == -1) continue;
+            if (sock == -1) {
+                continue;
+            }
 
             if (cfg->is_server) {
                 int opt = 1;
                 setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
                 if (p->ai_family == AF_INET6) {
-                    int v6only = 0;
-                    setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY,
-                               &v6only, sizeof(v6only));
+                    int ip6 = 0;
+                    setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &ip6, sizeof(ip6));
                 }
 
                 if (bind(sock, p->ai_addr, p->ai_addrlen) == 0) {
@@ -68,7 +73,9 @@ int socket_setup(struct config *cfg) {
             sock = -1;
         }
 
-        if (cfg->is_client) break;
+        if (cfg->is_client) {
+            break;
+        }
     }
 
     fprintf(stderr, "Failed to create socket\n");

@@ -12,7 +12,6 @@
 # =============================================================================
 
 BINARY="${1:-./ipk-rdt}"
-PROXY_SCRIPT="$(dirname "$0")/udp_proxy.py"
 TMPDIR_BASE="/tmp/ipk_rdt_test_$$"
 mkdir -p "$TMPDIR_BASE"
 
@@ -60,7 +59,7 @@ stop_all() {
     if [ -n "$SRV_PID" ]; then
         # Čakaj max 3 sekundy (30 × 0.1s)
         local waited=0
-        while kill -0 "$SRV_PID" 2>/dev/null && [ $waited -lt 50 ]; do
+        while kill -0 "$SRV_PID" 2>/dev/null && [ $waited -lt 150 ]; do
             sleep 0.1
             waited=$((waited+1))
         done
@@ -194,13 +193,6 @@ next_port() {
 if [ ! -x "$BINARY" ]; then
     echo -e "${RED}ERROR: Binary '$BINARY' neexistuje alebo nie je spustiteľný${NC}"
     exit 1
-fi
-
-if [ ! -f "$PROXY_SCRIPT" ]; then
-    echo -e "${YELLOW}WARN: udp_proxy.py nenájdený na '$PROXY_SCRIPT' — testy so simuláciou siete sa preskočia${NC}"
-    HAS_PROXY=0
-else
-    HAS_PROXY=1
 fi
 
 echo -e "${BOLD}Binary: $BINARY${NC}"
@@ -629,105 +621,326 @@ log_head "SEKCIA 3: Exit kódy a chybové stavy"
 }
 
 # =============================================================================
-# SEKCIA 4 — Simulácia siete (vyžaduje udp_proxy.py)
+# SEKCIA 4 — Simulácia siete pomocou tc netem
 # =============================================================================
-log_head "SEKCIA 4: Simulácia siete (packet loss, dup, reorder)"
+log_head "SEKCIA 4: Simulácia siete (tc netem)"
 
-if [ "$HAS_PROXY" -eq 0 ]; then
-    log_skip "4.x — udp_proxy.py nie je dostupný"
+# Skontroluj dostupnosť tc a root práv
+HAS_TC=0
+if command -v tc >/dev/null 2>&1; then
+    if tc qdisc show dev lo >/dev/null 2>&1; then
+        HAS_TC=1
+        log_info "tc netem je dostupný — spúšťam sieťové testy"
+    else
+        log_info "tc je dostupný ale bez root práv — skúšam sudo"
+        if sudo tc qdisc show dev lo >/dev/null 2>&1; then
+            HAS_TC=1
+            TC_SUDO="sudo"
+            log_info "tc funguje cez sudo"
+        fi
+    fi
+else
+    log_info "tc netem nie je dostupný — sekcia 4 sa preskočí"
+fi
+
+TC_SUDO="${TC_SUDO:-}"
+TC_IFACE="lo"
+
+# Pomocné funkcie pre tc netem
+netem_set() {
+    # Aplikuj netem pravidlo na loopback — filtruje len náš port
+    # $1 = port servera, zvyšok = netem parametre
+    local port="$1"; shift
+    $TC_SUDO tc qdisc del dev "$TC_IFACE" root 2>/dev/null || true
+    $TC_SUDO tc qdisc add dev "$TC_IFACE" root handle 1: prio priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2>/dev/null
+    $TC_SUDO tc qdisc add dev "$TC_IFACE" parent 1:3 handle 30: netem "$@" 2>/dev/null
+    $TC_SUDO tc filter add dev "$TC_IFACE" parent 1:0 protocol ip u32 \
+        match ip dport "$port" 0xffff flowid 1:3 2>/dev/null
+    $TC_SUDO tc filter add dev "$TC_IFACE" parent 1:0 protocol ip u32 \
+        match ip sport "$port" 0xffff flowid 1:3 2>/dev/null
+}
+
+netem_clear() {
+    $TC_SUDO tc qdisc del dev "$TC_IFACE" root 2>/dev/null || true
+}
+
+# Spustí test s netem a bez proxy
+run_netem_test() {
+    local name="$1"
+    local port="$2"
+    local input="$3"
+    local output="$4"
+    local timeout="$5"
+    local addr="${6:-127.0.0.1}"
+
+    start_server "$port" "$output" "$timeout"
+    CLI_EXIT=$(run_client "$addr" "$port" "$input" "$timeout")
+    SRV_EXIT=$(stop_all)
+    netem_clear
+    check_transfer "$name" "$input" "$output" "$CLI_EXIT" "$SRV_EXIT"
+}
+
+if [ "$HAS_TC" -eq 0 ]; then
+    for i in $(seq 1 20); do
+        log_skip "4.$i — tc netem nie je dostupný"
+    done
 else
 
-# --- Test 4.1: 5% packet loss ---
+# --- Test 4.1: Packet loss 5% ---
 {
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
+    PORT=$(next_port)
     INPUT="$TMPDIR_BASE/input_loss5.bin"
     OUTPUT="$TMPDIR_BASE/output_loss5.bin"
-    gen_file "$INPUT" $((10*1024))
+    gen_file "$INPUT" $((30*1024))
 
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --loss 5 --seed 1
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.1 5%% packet loss (10 KB)" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
+    netem_set "$PORT" loss 5%
+    run_netem_test "4.1 5%% packet loss (30 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
 }
 
-# --- Test 4.2: 15% packet loss ---
+# --- Test 4.2: Packet loss 10% ---
 {
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_loss10.bin"
+    OUTPUT="$TMPDIR_BASE/output_loss10.bin"
+    gen_file "$INPUT" $((20*1024))
+
+    netem_set "$PORT" loss 10%
+    run_netem_test "4.2 10%% packet loss (20 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.3: Packet loss 15% ---
+{
+    PORT=$(next_port)
     INPUT="$TMPDIR_BASE/input_loss15.bin"
     OUTPUT="$TMPDIR_BASE/output_loss15.bin"
-    gen_file "$INPUT" $((10*1024))
+    gen_file "$INPUT" $((15*1024))
 
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --loss 15 --seed 2
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.2 15%% packet loss (10 KB)" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
+    netem_set "$PORT" loss 15%
+    run_netem_test "4.3 15%% packet loss (15 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
 }
 
-# --- Test 4.3: Duplikácia paketov ---
+# --- Test 4.4: Packet loss 25% ---
 {
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
-    INPUT="$TMPDIR_BASE/input_dup.bin"
-    OUTPUT="$TMPDIR_BASE/output_dup.bin"
-    gen_file "$INPUT" $((10*1024))
-
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --dup 30 --seed 3
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.3 30%% duplikácia paketov (10 KB)" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
-}
-
-# --- Test 4.4: Preusporiadanie paketov ---
-{
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
-    INPUT="$TMPDIR_BASE/input_reorder.bin"
-    OUTPUT="$TMPDIR_BASE/output_reorder.bin"
-    gen_file "$INPUT" $((10*1024))
-
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --reorder 20 --delay 10 --seed 4
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.4 20%% reorder + 10ms delay (10 KB)" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
-}
-
-# --- Test 4.5: Kombinácia loss + dup + reorder ---
-{
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
-    INPUT="$TMPDIR_BASE/input_chaos.bin"
-    OUTPUT="$TMPDIR_BASE/output_chaos.bin"
-    gen_file "$INPUT" $((5*1024))
-
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --loss 10 --dup 10 --reorder 10 --delay 20 --jitter 10 --seed 5
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.5 Chaos (10%% loss + 10%% dup + 10%% reorder + jitter) 5 KB" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
-}
-
-# --- Test 4.6: Vysoká strata (25%) ---
-{
-    SRV_PORT=$(next_port)
-    CLI_PORT=$(next_port)
+    PORT=$(next_port)
     INPUT="$TMPDIR_BASE/input_loss25.bin"
     OUTPUT="$TMPDIR_BASE/output_loss25.bin"
-    gen_file "$INPUT" $((5*1024))
+    gen_file "$INPUT" $((10*1024))
 
-    start_server "$SRV_PORT" "$OUTPUT" 30
-    start_proxy  "$CLI_PORT" "$SRV_PORT" --loss 25 --seed 6
-    CLI_EXIT=$(run_client "127.0.0.1" "$CLI_PORT" "$INPUT" 30)
-    SRV_EXIT=$(stop_all)
-    check_transfer "4.6 25%% packet loss (5 KB)" "$INPUT" "$OUTPUT" "$CLI_EXIT" "$SRV_EXIT"
+    netem_set "$PORT" loss 25%
+    run_netem_test "4.4 25%% packet loss (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
 }
 
-fi  # HAS_PROXY
+# --- Test 4.5: Packet duplication 20% ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_dup20.bin"
+    OUTPUT="$TMPDIR_BASE/output_dup20.bin"
+    gen_file "$INPUT" $((20*1024))
+
+    netem_set "$PORT" duplicate 20%
+    run_netem_test "4.5 20%% packet duplication (20 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.6: Packet duplication 50% ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_dup50.bin"
+    OUTPUT="$TMPDIR_BASE/output_dup50.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" duplicate 50%
+    run_netem_test "4.6 50%% packet duplication (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.7: Delay 50ms ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_delay50.bin"
+    OUTPUT="$TMPDIR_BASE/output_delay50.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" delay 50ms
+    run_netem_test "4.7 50ms delay (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.8: Delay 100ms + jitter 20ms ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_jitter.bin"
+    OUTPUT="$TMPDIR_BASE/output_jitter.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" delay 100ms 20ms distribution normal
+    run_netem_test "4.8 100ms delay + 20ms jitter (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.9: Packet reorder 25% s delay ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_reorder.bin"
+    OUTPUT="$TMPDIR_BASE/output_reorder.bin"
+    gen_file "$INPUT" $((15*1024))
+
+    # reorder: 25% paketov sa pošle okamžite, zvyšok s 20ms oneskorením
+    netem_set "$PORT" delay 20ms reorder 25% 50%
+    run_netem_test "4.9 25%% reorder + 20ms delay (15 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.10: Packet corruption 1% ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_corrupt.bin"
+    OUTPUT="$TMPDIR_BASE/output_corrupt.bin"
+    gen_file "$INPUT" $((20*1024))
+
+    netem_set "$PORT" corrupt 1%
+    run_netem_test "4.10 1%% packet corruption (20 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 30
+}
+
+# --- Test 4.11: Loss 5% + delay 20ms + duplicate 10% ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_combo1.bin"
+    OUTPUT="$TMPDIR_BASE/output_combo1.bin"
+    gen_file "$INPUT" $((15*1024))
+
+    netem_set "$PORT" loss 5% delay 20ms duplicate 10%
+    run_netem_test "4.11 loss 5%% + delay 20ms + dup 10%% (15 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# --- Test 4.12: Loss 10% + reorder 20% + delay 30ms ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_combo2.bin"
+    OUTPUT="$TMPDIR_BASE/output_combo2.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" loss 10% delay 30ms reorder 20% 50%
+    run_netem_test "4.12 loss 10%% + reorder 20%% + delay 30ms (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# --- Test 4.13: Chaos — loss 15% + dup 20% + delay 50ms + jitter 10ms ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_chaos.bin"
+    OUTPUT="$TMPDIR_BASE/output_chaos.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" loss 15% duplicate 20% delay 50ms 10ms
+    run_netem_test "4.13 Chaos: loss 15%% + dup 20%% + 50ms delay (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# --- Test 4.14: Packet loss burst (Gilbertov model) ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_burst.bin"
+    OUTPUT="$TMPDIR_BASE/output_burst.bin"
+    gen_file "$INPUT" $((20*1024))
+
+    # loss gemodel = Gilbertov-Elliottov model bursty loss
+    netem_set "$PORT" loss gemodel 10% 25% 85% 50%
+    run_netem_test "4.14 Bursty loss (Gilbert-Elliott model) (20 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# --- Test 4.15: Prázdny vstup cez lossy kanál ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_empty_loss.bin"
+    OUTPUT="$TMPDIR_BASE/output_empty_loss.bin"
+    touch "$INPUT"
+
+    netem_set "$PORT" loss 20% duplicate 10%
+    run_netem_test "4.15 Prázdny vstup cez lossy kanál" \
+        "$PORT" "$INPUT" "$OUTPUT" 20
+}
+
+# --- Test 4.16: stdin→stdout cez lossy kanál ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_stdio_loss.bin"
+    gen_file "$INPUT" $((10*1024))
+    cp "$INPUT" "$TMPDIR_BASE/stdin_input"
+
+    netem_set "$PORT" loss 10%
+    start_server "$PORT" "-" 30
+    CLI_EXIT=$(run_client "127.0.0.1" "$PORT" "-" 30)
+    SRV_EXIT=$(stop_all)
+    netem_clear
+    check_transfer "4.16 stdin→stdout cez 10%% loss (10 KB)" \
+        "$INPUT" "$TMPDIR_BASE/srv_stdout" "$CLI_EXIT" "$SRV_EXIT"
+}
+
+# --- Test 4.17: Extrémne oneskorenie 200ms ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_delay200.bin"
+    OUTPUT="$TMPDIR_BASE/output_delay200.bin"
+    gen_file "$INPUT" $((5*1024))
+
+    netem_set "$PORT" delay 200ms
+    run_netem_test "4.17 200ms delay (5 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# --- Test 4.18: Loss 5% + IPv6 (ak dostupné) ---
+{
+    if [ "$IPV6_OK" -eq 0 ]; then
+        log_skip "4.18 IPv6 + loss — IPv6 nedostupné"
+    else
+        PORT=$(next_port)
+        INPUT="$TMPDIR_BASE/input_ipv6_loss.bin"
+        OUTPUT="$TMPDIR_BASE/output_ipv6_loss.bin"
+        gen_file "$INPUT" $((10*1024))
+
+        netem_set "$PORT" loss 5%
+        run_netem_test "4.18 IPv6 + 5%% loss (10 KB)" \
+            "$PORT" "$INPUT" "$OUTPUT" 30 "::1"
+    fi
+}
+
+# --- Test 4.19: Packet loss 30% --- (stres pre retransmit)
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_loss30.bin"
+    OUTPUT="$TMPDIR_BASE/output_loss30.bin"
+    gen_file "$INPUT" $((5*1024))
+
+    netem_set "$PORT" loss 30%
+    run_netem_test "4.19 30%% packet loss (5 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 60
+}
+
+# --- Test 4.20: Corrupt 2% + loss 5% ---
+{
+    PORT=$(next_port)
+    INPUT="$TMPDIR_BASE/input_corrupt_loss.bin"
+    OUTPUT="$TMPDIR_BASE/output_corrupt_loss.bin"
+    gen_file "$INPUT" $((10*1024))
+
+    netem_set "$PORT" corrupt 2% loss 5%
+    run_netem_test "4.20 corrupt 2%% + loss 5%% (10 KB)" \
+        "$PORT" "$INPUT" "$OUTPUT" 40
+}
+
+# Upratanie netem po sekcii 4
+netem_clear
+log_info "tc netem pravidlá vyčistené"
+
+fi  # HAS_TC
 
 # =============================================================================
 # SEKCIA 5 — Stress testy
