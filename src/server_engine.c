@@ -135,6 +135,5 @@ int server_engine(int sock_id, struct config *cfg) {
     if (output && !is_stdout) {
         fclose(output);
     }
-
     return 0;
 }

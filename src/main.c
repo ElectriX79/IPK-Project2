@@ -105,15 +105,20 @@ int main(int argc, char **argv) {
     }
 
     if (net_cfg.is_server) {
-
         if (server_engine(socket_id, &net_cfg) != 0) {
             fprintf(stderr, "Server error\n");
+            close(socket_id);
+            freeaddrinfo(net_cfg.addr);
+            return 1;
         }
 
     } else if (net_cfg.is_client) {
 
         if (client_engine(socket_id, &net_cfg) != 0) {
             fprintf(stderr, "Client error\n");
+            close(socket_id);
+            freeaddrinfo(net_cfg.addr);
+            return 1;
         }
 
     } else {
@@ -123,8 +128,6 @@ int main(int argc, char **argv) {
     }
 
 
-    close(socket_id);
-    freeaddrinfo(net_cfg.addr);
 
     return 0;
 }

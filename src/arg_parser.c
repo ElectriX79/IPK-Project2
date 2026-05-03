@@ -156,12 +156,7 @@ void argument_parser(int argc, char **argv, struct config *cfg) {
         hints.ai_flags = AI_PASSIVE;
     }
 
-    int err = getaddrinfo(
-        address,
-        port_str,
-        &hints,
-        &res
-    );
+    int err = getaddrinfo(address,port_str,&hints,&res);
 
     if (err != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));

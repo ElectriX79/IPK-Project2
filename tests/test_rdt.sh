@@ -102,7 +102,7 @@ start_server() {
         "$BINARY" -s -p "$port" -o "$output" -w "$timeout" > "$TMPDIR_BASE/srv_stdout" 2>"$TMPDIR_BASE/srv_stderr" &
     fi
     SRV_PID=$!
-    sleep 0.15
+    sleep 0.4
 }
 
 # Spustí proxy
@@ -113,7 +113,7 @@ start_proxy() {
     python3 "$PROXY_SCRIPT" --listen "$listen_port" --forward "$forward_port" "$@" \
         >"$TMPDIR_BASE/proxy_stdout" 2>"$TMPDIR_BASE/proxy_stderr" &
     PROXY_PID=$!
-    sleep 0.1
+    sleep 0.3
 }
 
 # Spustí klienta a čaká na koniec

@@ -132,8 +132,23 @@ int client_server_handshake(int sock_id, struct config *cfg) {
         packet_rcv.ack = ntohl(packet_rcv.ack);
 
         if(packet_rcv.flags == (SYN | ACK) && conn_id == packet_rcv.connection_id) {
+            struct rdt_header ack = {0};
+
+            ack.connection_id = htonl(conn_id);
+            ack.seq_num = htonl(1);
+            ack.ack = htonl(packet_rcv.seq_num + 1 );
+            ack.checksum = 0;
+            ack.data_len = 0;
+            ack.flags = ACK;
+
+            ack.checksum = compute_checksum(&ack, sizeof(ack));
+
+            if(send(sock_id, &ack, sizeof(ack), 0 ) < 0 ) {
+                perror("send ACK\n");
+            }
             return 0;
         }
+
     }
 }
 

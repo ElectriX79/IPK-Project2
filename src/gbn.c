@@ -18,11 +18,18 @@ void window_init(struct window *window, struct config *cfg) {
     window->done = false;
     memset(window->packets, 0, sizeof(window->packets));
 
+
+
     if(strcmp(cfg->input_file, "-") == 0) {
         window->input = stdin;
     }
     else {
         window->input = fopen(cfg->input_file, "rb");
+        if (window->input == NULL) {
+            perror("fopen");
+            exit(1);
+        }
+
     }
 }
 
