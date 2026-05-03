@@ -60,9 +60,16 @@ void print_help(void) {
  *
  */
 void argument_parser(int argc, char **argv, struct config *cfg) {
+
+    for(int i = 1; i < argc; i++) {
+        if(strcmp(argv[i], "--help") == 0 || strcmp(argv[i],"-h") == 0 ) {
+            print_help();
+            exit(0);
+        }
+    }
+
     int opt;
 
-    // defaulty
     memset(cfg, 0, sizeof(*cfg));
     cfg->timeout = 1;
 
@@ -99,10 +106,6 @@ void argument_parser(int argc, char **argv, struct config *cfg) {
             case 'w':
                 cfg->timeout = atoi(optarg);
                 break;
-
-            case 'h':
-                print_help();
-                exit(0);
 
             default:
                 fprintf(stderr, "Invalid arguments\n");

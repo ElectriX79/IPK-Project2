@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <unistd.h>
+
 void window_init(struct window *window, struct config *cfg) {
     window->base = 0;
     window->next_seq = 0;
