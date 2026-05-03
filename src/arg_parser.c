@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #include <netdb.h>
 
+/**
+ * @brief Print usage information for the program.
+ * Displays a help message describing command-line arguments, and how to run the program in both
+ * client and server mode
+ */
 void print_help(void) {
     printf(
         "Usage:\n"
@@ -37,7 +42,23 @@ void print_help(void) {
     );
 }
 
-
+/**
+ * @brief Parses command-line arguments and fills configuration structure.
+ *
+ * Processes all supported CLI options and initializes the @p cfg structure
+ * used across the program. Supports both short and long options.
+ *
+ * Responsibilities:
+ *  - Validates argument combinations (e.g., cannot use both -s and -c)
+ *  - Converts string arguments to appropriate types (port, timeout)
+ *  - Sets default values when optional arguments are not provided
+ *  - Prepares address/port strings for later use (e.g., getaddrinfo)
+ *
+ * Error handling:
+ *  - On invalid arguments or missing required parameters, prints error message
+ *    and terminates the program (usually via exit()).
+ *
+ */
 void argument_parser(int argc, char **argv, struct config *cfg) {
     int opt;
 
