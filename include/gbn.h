@@ -9,7 +9,7 @@
 #include "read_write_engine.h"
 #include "rdt_header.h"
 #include <stdbool.h>
-#define WINDOW_SIZE 10
+#define WINDOW_SIZE 30
 #define TIMEOUT 2
 #define DATA_LEN 1180
 
