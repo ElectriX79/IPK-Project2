@@ -99,7 +99,6 @@ int window_receive_ack(int sock_id, struct window *w, struct config *cfg) {
     if(ack>= w->next_seq) {
         return 1;
     }
-
     w->base = ack + 1;
 
     return 0;

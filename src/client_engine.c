@@ -165,12 +165,22 @@ int client_engine(int sock_id, struct config *cfg) {
         return -1;
     }
 
+    struct timeval tv_data = {0, 100000};  // 100ms
+    setsockopt(sock_id, SOL_SOCKET, SO_RCVTIMEO, &tv_data, sizeof(tv_data));
+
     struct window window;
     window_init(&window, cfg);
 
-
+    time_t last_progress = time(NULL);
 
     while(1) {
+
+        if (time(NULL) - last_progress > cfg->timeout) {
+            fprintf(stderr, "Global timeout reached\n");
+            window_cleanup(sock_id, &window);
+            return -1;
+        }
+
         if(window.done == true && window.base == window.next_seq) {
             terminate_connection(sock_id, cfg);
             return 0;
@@ -180,9 +190,11 @@ int client_engine(int sock_id, struct config *cfg) {
                 window_cleanup(sock_id,&window);
                 return -1;
             }
+            last_progress = time(NULL);
         }
         int ret = window_receive_ack(sock_id, &window, cfg);
         if(ret == 0) {
+            last_progress = time(NULL);
             continue;
         }
         else if (ret == TIMEOUT) {
@@ -190,6 +202,7 @@ int client_engine(int sock_id, struct config *cfg) {
                 window_cleanup(sock_id, &window);
                 return -1;
             }
+            last_progress = time(NULL);
         }
         else if(ret == -1) {
             window_cleanup(sock_id, &window);
