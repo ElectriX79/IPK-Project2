@@ -562,6 +562,10 @@ During the development of this project, **Claude** (Anthropic, claude-sonnet-4) 
 
 This README was written with AI assistance based on the actual source code. AI produced the header diagram, UML state machine and sequence diagrams, algorithm comparison, test result tables, and known limitations. All technical content reflects the actual implementation.
 
+### Makefile
+
+Makefile was written with AI 
+
 ### What AI was NOT used for
 
 - Core protocol design (header format, flag values, GBN window logic) — designed independently.
