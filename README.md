@@ -17,7 +17,6 @@
 7. [Testing](#testing)
 8. [Known Limitations](#known-limitations)
 9. [Use of AI Tools](#use-of-ai-tools)
-10. [Bibliography](#bibliography)
 
 ---
 
@@ -149,14 +148,12 @@ Client                          Server
   |                               |
   |<----- SYN|ACK (conn_id) -----|
   |                               |
-  |------ ACK ------------------>|
-  |                               |
   |====== DATA transfer =========|
 ```
 
 1. Client generates a random `connection_id` and sends `SYN`.
 2. Server responds with `SYN|ACK` containing the same `connection_id`.
-3. Client sends `ACK` confirming the session, then begins data transfer immediately.
+3. Client begins transferring data.
 
 The handshake uses a 200ms retransmit interval with a hard deadline of `cfg->timeout` seconds. If no `SYN|ACK` is received within the timeout, the client exits with a non-zero code.
 
@@ -186,7 +183,7 @@ Once all data has been acknowledged (`window.base == window.next_seq && window.d
 
 The assignment requires pipelined transmission — more than one unacknowledged segment in flight at a time. Two standard approaches exist:
 
-**Selective Repeat (SR):** The receiver buffers out-of-order segments and acknowledges them individually. This minimises retransmissions but requires per-segment buffering on the receiver side and more complex ACK logic.
+**Selective Repeat (SR):** The receiver buffers out-of-order segments and acknowledges them individually. 
 
 **Go-Back-N (GBN):** The receiver only accepts segments in order. Any out-of-order or duplicate segment is discarded. The sender retransmits all unacknowledged segments when a timeout occurs.
 
@@ -199,7 +196,7 @@ GBN was chosen because:
 
 | Parameter | Value                 | Rationale |
 |---|-----------------------|---|
-| `WINDOW_SIZE` | 10                    | Sufficient for localhost; larger windows increase memory pressure with diminishing returns on low-RTT links |
+| `WINDOW_SIZE` | 30                    | Sufficient for localhost; larger windows increase memory pressure with diminishing returns on low-RTT links |
 | `DATA_LEN` (payload) | 1180 B                | Total PDU = 1200 B, safely below MTU |
 | Retransmit interval | 100ms (`SO_RCVTIMEO`) | Low enough to recover from loss quickly; high enough to avoid spurious retransmissions |
 
