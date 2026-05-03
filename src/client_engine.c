@@ -62,7 +62,7 @@ int terminate_connection(int sock_id, struct config *cfg) {
         }
 
         if ((resp.flags & (FIN | ACK)) == (FIN | ACK)) {
-            return 0; // ✔ úspech
+            return 0;
         }
     }
 
@@ -101,21 +101,24 @@ int client_server_handshake(int sock_id, struct config *cfg) {
     packet_hdr.checksum = compute_checksum(&packet_hdr, sizeof(packet_hdr));
 
     while(1) {
+        if(time(NULL) - start >= cfg->timeout) {
+            fprintf(stderr, "Handshake timeout\n");
+            return -1;
+        }
+
         if(send(sock_id, &packet_hdr, sizeof(packet_hdr), 0) < 0) {
             perror("send SYN");
             return -1;
         }
 
         int n = recv(sock_id, &packet_rcv, sizeof(packet_rcv), 0);
-        if(n < 0) {
-            if(errno != EWOULDBLOCK && errno != EAGAIN) {
-                perror("recv");
-                return -1;
-            }
+
+        if(n <= 0) {
             continue;
         }
 
-        uint16_t rcv_checksum = packet_rcv.checksum;
+
+        uint32_t rcv_checksum = packet_rcv.checksum;
         packet_rcv.checksum = 0;
 
 
@@ -126,7 +129,7 @@ int client_server_handshake(int sock_id, struct config *cfg) {
         }
 
         packet_rcv.connection_id = ntohl(packet_rcv.connection_id);
-
+        packet_rcv.ack = ntohl(packet_rcv.ack);
 
         if(packet_rcv.flags == (SYN | ACK) && conn_id == packet_rcv.connection_id) {
             struct rdt_header ack = {0};
@@ -144,11 +147,6 @@ int client_server_handshake(int sock_id, struct config *cfg) {
                 perror("send ACK\n");
             }
             return 0;
-        }
-
-        if( time(NULL) - start >= cfg->timeout) {
-            fprintf(stderr, "Handshake timeout\n");
-            return -1;
         }
 
     }

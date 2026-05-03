@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <netdb.h>
+
 void print_help(void) {
     printf(
         "Usage:\n"

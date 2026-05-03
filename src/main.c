@@ -1,3 +1,10 @@
+/**
+* @author Samuel Chovan - xchovas00
+*/
+
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -16,17 +23,22 @@
 //
 
 
+/**
+* @brief Module used to create and configure UDP socket.
+ * For server mode it iterates twice in order to  obtain correct IPV6 address and not IPV4. After successing, address is assigned to socket
+ * For client mode, iterates once and connects to the first reachable address. Using connect on a socket restricts send/recv to the target address.
+ */
+
 int socket_setup(struct config *cfg) {
     struct addrinfo *p;
     int sock = -1;
 
-    // Server: skús najprv IPv6 (dual-stack pokryje aj IPv4)
-    // Klient: iteruj normálne
+
     for (int pass = 0; pass < 2; pass++) {
         for (p = cfg->addr; p != NULL; p = p->ai_next) {
 
             if (cfg->is_server) {
-                // pass 0 = chceme IPv6, pass 1 = IPv4 fallback
+
                 if (pass == 0 && p->ai_family != AF_INET6) continue;
                 if (pass == 1 && p->ai_family != AF_INET)  continue;
             }
@@ -45,7 +57,7 @@ int socket_setup(struct config *cfg) {
                 }
 
                 if (bind(sock, p->ai_addr, p->ai_addrlen) == 0) {
-                    return sock;  // úspech
+                    return sock;
                 }
             }
 
@@ -59,7 +71,6 @@ int socket_setup(struct config *cfg) {
             sock = -1;
         }
 
-        // Klient nepotrebuje druhý pass
         if (cfg->is_client) break;
     }
 
@@ -67,8 +78,22 @@ int socket_setup(struct config *cfg) {
     return -1;
 }
 
-
-
+/**
+ * @brief Program entry point. Central unit controlling flow of program.
+ * Functions:
+ * - argument_parser(): Parses CLI arguments and fills configuration
+ * - socket_setup(): Creates and initializes UDP socked based on configuration.
+ * - server_engine(): Run server-side logic
+ * - client_engine(): RUn client-side logic
+ *
+ * FLow:
+ * 1. Parse input arguments
+ * 2. Initialize socket
+ * 3. server/client demultiplexing
+ * 4. Error handling
+ * 5. Cleanup
+ *
+ **/
 int main(int argc, char **argv) {
 
     int socket_id;
